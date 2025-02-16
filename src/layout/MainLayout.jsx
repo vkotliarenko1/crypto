@@ -1,22 +1,9 @@
-import React, { useState } from "react";
-import { PieChartOutlined } from "@ant-design/icons";
-import { Layout, Menu, theme } from "antd";
+import React from "react";
+import { Layout, theme } from "antd";
 
-const { Content, Footer, Sider } = Layout;
-
-function getItem(label, key, icon, children) {
-  return {
-    key,
-    icon,
-    children,
-    label,
-  };
-}
-
-const items = [getItem("Dashboard", "1", <PieChartOutlined />)];
+const { Content } = Layout;
 
 const MainLayout = ({ children }) => {
-  const [collapsed, setCollapsed] = useState(false);
   const {
     token: { colorBgContainer, borderRadiusLG },
   } = theme.useToken();
@@ -27,24 +14,8 @@ const MainLayout = ({ children }) => {
         minHeight: "100vh",
       }}
     >
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={(value) => setCollapsed(value)}
-      >
-        <Menu
-          theme="dark"
-          defaultSelectedKeys={["1"]}
-          mode="inline"
-          items={items}
-        />
-      </Sider>
       <Layout>
-        <Content
-          style={{
-            margin: "16px 16px",
-          }}
-        >
+        <Content>
           <div
             style={{
               padding: 24,
@@ -56,13 +27,6 @@ const MainLayout = ({ children }) => {
             {children}
           </div>
         </Content>
-        <Footer
-          style={{
-            textAlign: "center",
-          }}
-        >
-          Ant Design ©{new Date().getFullYear()} Created by Ant UED
-        </Footer>
       </Layout>
     </Layout>
   );
