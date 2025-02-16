@@ -36,5 +36,5 @@ export const calculateRSI = (prices, period = 14) => {
   const rs = avgGain / avgLoss;
   const rsi = 100 - 100 / (1 + rs);
 
-  return rsi;
+  return rsi.toFixed(2);
 };
