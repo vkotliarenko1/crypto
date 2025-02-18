@@ -1,14 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { Row, Col, Table, Tag, Button } from "antd";
 import { CRYPTO_LIST } from "../../constants";
 import { getData } from "../../services/getData";
 import { calculateRSI } from "../../utils/calculateRSI";
-import { Row, Col, Table, Tag, Button } from "antd";
+import { Overbought } from "../Tables/Overbought";
 
 import "./style.css";
 
 const { Column } = Table;
 
-export const RSI = () => {
+export const Analytics = () => {
   const [data, setData] = useState({
     oversold: [],
     overbought: [],
@@ -38,7 +39,13 @@ export const RSI = () => {
           const smaSignalRSI = checkSignals(prices, rsi);
           const smaSignal = checkSignals(prices);
 
-          return { symbol, rsi, smaSignalRSI, smaSignal };
+          // Рассчитываем MACD
+          const { macdLine, signalLine, histogram } = calculateMACD(prices);
+          const lastMacd = macdLine[macdLine.length - 1];
+          const lastSignal = signalLine[signalLine.length - 1];
+          const macdSignal = lastMacd > lastSignal ? "BUY" : "SELL";
+
+          return { symbol, rsi, smaSignalRSI, smaSignal, macdSignal };
         } catch (err) {
           console.error(`Ошибка для ${symbol}:`, err.message);
           return null;
@@ -61,15 +68,60 @@ export const RSI = () => {
       const buyRSI = all.filter((item) => item.smaSignalRSI === "BUY");
       const sell = all.filter((item) => item.smaSignal === "SELL");
       const buy = all.filter((item) => item.smaSignal === "BUY");
+      const macdBuy = all.filter((item) => item.macdSignal === "BUY");
+      const macdSell = all.filter((item) => item.macdSignal === "SELL");
 
-      setData({ oversold, overbought, all, buy, sell, buyRSI, sellRSI });
+      setData({
+        oversold,
+        overbought,
+        all,
+        buy,
+        sell,
+        buyRSI,
+        sellRSI,
+        macdBuy,
+        macdSell,
+      });
     } catch (error) {
       console.error("Error:", error);
     }
     setLoading(false);
   };
 
-  function calculateSMA(data, period) {
+  const calculateEMA = (data, period) => {
+    const k = 2 / (period + 1); // Коэффициент сглаживания
+    const emaValues = [data[0]]; // Первое значение EMA равно первому значению данных
+
+    for (let i = 1; i < data.length; i++) {
+      const ema = data[i] * k + emaValues[i - 1] * (1 - k);
+      emaValues.push(ema);
+    }
+
+    return emaValues;
+  };
+
+  const calculateMACD = (
+    prices,
+    fastPeriod = 12,
+    slowPeriod = 26,
+    signalPeriod = 9
+  ) => {
+    const fastEMA = calculateEMA(prices, fastPeriod);
+    const slowEMA = calculateEMA(prices, slowPeriod);
+
+    // MACD Line: Разница между быстрой и медленной EMA
+    const macdLine = fastEMA.map((value, index) => value - slowEMA[index]);
+
+    // Signal Line: EMA от MACD Line
+    const signalLine = calculateEMA(macdLine, signalPeriod);
+
+    // Histogram: Разница между MACD Line и Signal Line
+    const histogram = macdLine.map((value, index) => value - signalLine[index]);
+
+    return { macdLine, signalLine, histogram };
+  };
+
+  const calculateSMA = (data, period) => {
     const smaValues = [];
     for (let i = period - 1; i < data.length; i++) {
       const sum = data
@@ -78,7 +130,7 @@ export const RSI = () => {
       smaValues.push(sum / period);
     }
     return smaValues;
-  }
+  };
 
   function checkSignals(prices, rsi, fastPeriod = 9, slowPeriod = 21) {
     if (prices.length < slowPeriod) return null;
@@ -94,10 +146,10 @@ export const RSI = () => {
 
     if (previousFastSMA < previousSlowSMA && lastFastSMA > lastSlowSMA) {
       if (!rsi) return "BUY";
-      if (rsi < 30) return "BUY";
+      if (rsi < 35) return "BUY";
     } else if (previousFastSMA > previousSlowSMA && lastFastSMA < lastSlowSMA) {
       if (!rsi) return "SELL";
-      if (rsi > 70) return "SELL";
+      if (rsi > 65) return "SELL";
     }
     return "HOLD";
   }
@@ -108,17 +160,146 @@ export const RSI = () => {
 
   return (
     <Row gutter={[40, 40]}>
-      <Col span={12}>
+      <Col span={24}>
         <h1>Total count: {data.all.length}</h1>
       </Col>
-      <Col span={12}>
-        <Button onClick={refresh}>Refresh</Button>
+      <Col span={24}>
+        <Button type="primary" onClick={refresh}>
+          Refresh
+        </Button>
       </Col>
-      <Col span={12} xs={{ span: 24 }}>
-        <h2>Overbought</h2>
+      <Col sm={{ span: 12 }} xs={{ span: 24 }}>
+        <h2>Buy</h2>
         <Table
-          dataSource={data.overbought}
-          pagination={false}
+          dataSource={data.buy}
+          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
+        >
+          <Column
+            title="Name"
+            dataIndex="symbol"
+            key="name"
+            render={(value, record) => (
+              <Tag color={"green"} key={value}>
+                {value.toUpperCase()}
+              </Tag>
+            )}
+          />
+          <Column title="RSI" dataIndex="rsi" key="rsi" />
+          <Column
+            title="Signal"
+            dataIndex="smaSignal"
+            key="smaSignal"
+            render={(value) => (
+              <Tag
+                color={
+                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
+                }
+              >
+                {value}
+              </Tag>
+            )}
+          />
+          <Column
+            title="MACD Signal"
+            dataIndex="macdSignal"
+            key="macdSignal"
+            render={(value) => (
+              <Tag
+                color={
+                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
+                }
+              >
+                {value}
+              </Tag>
+            )}
+          />
+        </Table>
+      </Col>
+      <Col sm={{ span: 12 }} xs={{ span: 24 }}>
+        <h2>Sell</h2>
+        <Table
+          dataSource={data.sell}
+          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
+        >
+          <Column
+            title="Name"
+            dataIndex="symbol"
+            key="name"
+            render={(value, record) => (
+              <Tag color={"green"} key={value}>
+                {value.toUpperCase()}
+              </Tag>
+            )}
+          />
+          <Column title="RSI" dataIndex="rsi" key="rsi" />
+          <Column
+            title="Signal"
+            dataIndex="smaSignal"
+            key="smaSignal"
+            render={(value) => (
+              <Tag
+                color={
+                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
+                }
+              >
+                {value}
+              </Tag>
+            )}
+          />
+          <Column
+            title="MACD Signal"
+            dataIndex="macdSignal"
+            key="macdSignal"
+            render={(value) => (
+              <Tag
+                color={
+                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
+                }
+              >
+                {value}
+              </Tag>
+            )}
+          />
+        </Table>
+      </Col>
+      <Col sm={{ span: 12 }} xs={{ span: 24 }}>
+        <h2>MACD Buy</h2>
+        <Table
+          dataSource={data.macdBuy}
+          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
+        >
+          <Column
+            title="Name"
+            dataIndex="symbol"
+            key="name"
+            render={(value, record) => (
+              <Tag color={"green"} key={value}>
+                {value.toUpperCase()}
+              </Tag>
+            )}
+          />
+          <Column title="RSI" dataIndex="rsi" key="rsi" />
+          <Column
+            title="MACD Signal"
+            dataIndex="macdSignal"
+            key="macdSignal"
+            render={(value) => (
+              <Tag
+                color={
+                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
+                }
+              >
+                {value}
+              </Tag>
+            )}
+          />
+        </Table>
+      </Col>
+
+      <Col sm={{ span: 12 }} xs={{ span: 24 }}>
+        <h2>MACD Sell</h2>
+        <Table
+          dataSource={data.macdSell}
           style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
         >
           <Column
@@ -133,9 +314,9 @@ export const RSI = () => {
           />
           <Column title="RSI" dataIndex="rsi" key="rsi" />
           <Column
-            title="Signal"
-            dataIndex="smaSignalRSI"
-            key="smaSignalRSI"
+            title="MACD Signal"
+            dataIndex="macdSignal"
+            key="macdSignal"
             render={(value) => (
               <Tag
                 color={
@@ -148,7 +329,76 @@ export const RSI = () => {
           />
         </Table>
       </Col>
-      <Col span={12} xs={{ span: 24 }}>
+      <Col sm={{ span: 12 }} xs={{ span: 24 }}>
+        <h2>Buy RSI</h2>
+        <Table
+          dataSource={data.buyRSI}
+          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
+        >
+          <Column
+            title="Name"
+            dataIndex="symbol"
+            key="name"
+            render={(value, record) => (
+              <Tag color={"green"} key={value}>
+                {value.toUpperCase()}
+              </Tag>
+            )}
+          />
+          <Column title="RSI" dataIndex="rsi" key="rsi" />
+          <Column
+            title="Signal"
+            dataIndex="smaSignal"
+            key="smaSignal"
+            render={(value) => (
+              <Tag
+                color={
+                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
+                }
+              >
+                {value}
+              </Tag>
+            )}
+          />
+        </Table>
+      </Col>
+      <Col sm={{ span: 12 }} xs={{ span: 24 }}>
+        <h2>Sell RSI</h2>
+        <Table
+          dataSource={data.sellRSI}
+          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
+        >
+          <Column
+            title="Name"
+            dataIndex="symbol"
+            key="name"
+            render={(value, record) => (
+              <Tag color={"green"} key={value}>
+                {value.toUpperCase()}
+              </Tag>
+            )}
+          />
+          <Column title="RSI" dataIndex="rsi" key="rsi" />
+          <Column
+            title="Signal"
+            dataIndex="smaSignal"
+            key="smaSignal"
+            render={(value) => (
+              <Tag
+                color={
+                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
+                }
+              >
+                {value}
+              </Tag>
+            )}
+          />
+        </Table>
+      </Col>
+      <Col sm={{ span: 12 }} xs={{ span: 24 }}>
+        <Overbought data={data.overbought} />
+      </Col>
+      <Col sm={{ span: 12 }} xs={{ span: 24 }}>
         <h2>Oversold</h2>
         <Table
           dataSource={data.oversold}
@@ -182,138 +432,7 @@ export const RSI = () => {
           />
         </Table>
       </Col>
-      <Col span={12} xs={{ span: 24 }}>
-        <h2>Buy</h2>
-        <Table
-          dataSource={data.buy}
-          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
-        >
-          <Column
-            title="Name"
-            dataIndex="symbol"
-            key="name"
-            render={(value, record) => (
-              <Tag color={"green"} key={value}>
-                {value.toUpperCase()}
-              </Tag>
-            )}
-          />
-          <Column title="RSI" dataIndex="rsi" key="rsi" />
-          <Column
-            title="Signal"
-            dataIndex="smaSignal"
-            key="smaSignal"
-            render={(value) => (
-              <Tag
-                color={
-                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
-                }
-              >
-                {value}
-              </Tag>
-            )}
-          />
-        </Table>
-      </Col>
-      <Col span={12} xs={{ span: 24 }}>
-        <h2>Sell</h2>
-        <Table
-          dataSource={data.sell}
-          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
-        >
-          <Column
-            title="Name"
-            dataIndex="symbol"
-            key="name"
-            render={(value, record) => (
-              <Tag color={"green"} key={value}>
-                {value.toUpperCase()}
-              </Tag>
-            )}
-          />
-          <Column title="RSI" dataIndex="rsi" key="rsi" />
-          <Column
-            title="Signal"
-            dataIndex="smaSignal"
-            key="smaSignal"
-            render={(value) => (
-              <Tag
-                color={
-                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
-                }
-              >
-                {value}
-              </Tag>
-            )}
-          />
-        </Table>
-      </Col>
-      <Col span={12} xs={{ span: 24 }}>
-        <h2>Buy RSI</h2>
-        <Table
-          dataSource={data.buyRSI}
-          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
-        >
-          <Column
-            title="Name"
-            dataIndex="symbol"
-            key="name"
-            render={(value, record) => (
-              <Tag color={"green"} key={value}>
-                {value.toUpperCase()}
-              </Tag>
-            )}
-          />
-          <Column title="RSI" dataIndex="rsi" key="rsi" />
-          <Column
-            title="Signal"
-            dataIndex="smaSignal"
-            key="smaSignal"
-            render={(value) => (
-              <Tag
-                color={
-                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
-                }
-              >
-                {value}
-              </Tag>
-            )}
-          />
-        </Table>
-      </Col>
-      <Col span={12} xs={{ span: 24 }}>
-        <h2>Sell RSI</h2>
-        <Table
-          dataSource={data.sellRSI}
-          style={{ boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px" }}
-        >
-          <Column
-            title="Name"
-            dataIndex="symbol"
-            key="name"
-            render={(value, record) => (
-              <Tag color={"green"} key={value}>
-                {value.toUpperCase()}
-              </Tag>
-            )}
-          />
-          <Column title="RSI" dataIndex="rsi" key="rsi" />
-          <Column
-            title="Signal"
-            dataIndex="smaSignal"
-            key="smaSignal"
-            render={(value) => (
-              <Tag
-                color={
-                  value === "BUY" ? "green" : value === "SELL" ? "red" : "blue"
-                }
-              >
-                {value}
-              </Tag>
-            )}
-          />
-        </Table>
-      </Col>
+
       <Col span={24}>
         <h2>All</h2>
         <Table

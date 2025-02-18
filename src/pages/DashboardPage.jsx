@@ -1,12 +1,12 @@
 import React from "react";
 
 import MainLayout from "../layout/MainLayout";
-import { RSI } from "../components/RSI";
+import { Analytics } from "../components/Analytics";
 
 export const DashboardPage = () => {
   return (
     <MainLayout>
-      <RSI />
+      <Analytics />
     </MainLayout>
   );
 };
